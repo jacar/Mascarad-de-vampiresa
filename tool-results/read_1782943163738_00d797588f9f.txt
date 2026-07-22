@@ -1,0 +1,992 @@
+     1→"use client";
+     2→
+     3→import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+     4→import Image from "next/image";
+     5→import { motion, useInView, AnimatePresence } from "framer-motion";
+     6→import {
+     7→  MapPin,
+     8→  Clock,
+     9→  Calendar,
+    10→  ChevronDown,
+    11→  Send,
+    12→  Users,
+    13→  Sparkles,
+    14→} from "lucide-react";
+    15→import { Button } from "@/components/ui/button";
+    16→import { Input } from "@/components/ui/input";
+    17→import { Textarea } from "@/components/ui/textarea";
+    18→import { useToast } from "@/hooks/use-toast";
+    19→
+    20→/* ═══════════════════════════════════════════
+    21→   CONSTANTS
+    22→   ═══════════════════════════════════════════ */
+    23→
+    24→const EVENT_DATE = new Date("2026-09-20T02:00:00Z"); // Sep 19, 9PM Bogota
+    25→const QUINCEANERA = "Johanny Chiquinquirá";
+    26→const PARENTS = ["Johanna Ocando", "Yoneldi Romero"];
+    27→const VENUE = 'Salón de fiestas "Blanco y Negro"';
+    28→const ADDRESS = "Entrando por Pipo a dos cuadras";
+    29→const MAP_URL = "https://maps.app.goo.gl/EaZkitxKtXjobwy46";
+    30→const CALENDAR_URL = `https://www.google.com/calendar/render?action=TEMPLATE&text=XV+Años+-+${encodeURIComponent(QUINCEANERA)}&dates=20260920T020000Z/20260920T050000Z&details=${encodeURIComponent("Mascarada Vampiresa\n\nCódigo de vestimenta: Formal")}&location=${encodeURIComponent(VENUE + ", " + ADDRESS)}&sf=true&output=xml`;
+    31→
+    32→const DRESS_COLORS = [
+    33→  { name: "Negro", hex: "#1C1C1C" },
+    34→  { name: "Blanco", hex: "#F0EDED" },
+    35→  { name: "Marrón", hex: "#6B3A2A" },
+    36→  { name: "Verde Oliva", hex: "#556B2F" },
+    37→  { name: "Azul", hex: "#2C4A6E" },
+    38→];
+    39→
+    40→const PARTY_COLORS = [
+    41→  { name: "Negro Oscuro", hex: "#0D0D0D", border: "#333" },
+    42→  { name: "Vino Rojo", hex: "#722F37" },
+    43→];
+    44→
+    45→/* ═══════════════════════════════════════════
+    46→   UTILITY COMPONENTS
+    47→   ═══════════════════════════════════════════ */
+    48→
+    49→function OrnamentalDivider({ className = "" }: { className?: string }) {
+    50→  return (
+    51→    <div className={`flex items-center justify-center gap-4 py-2 ${className}`}>
+    52→      <div className="h-px flex-1 bg-gradient-to-r from-transparent via-gold/40 to-transparent" />
+    53→      <Sparkles className="w-4 h-4 text-gold/70" />
+    54→      <div className="h-px flex-1 bg-gradient-to-r from-transparent via-gold/40 to-transparent" />
+    55→    </div>
+    56→  );
+    57→}
+    58→
+    59→function SectionTitle({
+    60→  children,
+    61→  subtitle,
+    62→}: {
+    63→  children: React.ReactNode;
+    64→  subtitle?: string;
+    65→}) {
+    66→  return (
+    67→    <motion.div
+    68→      initial={{ opacity: 0, y: 30 }}
+    69→      whileInView={{ opacity: 1, y: 0 }}
+    70→      viewport={{ once: true, margin: "-50px" }}
+    71→      transition={{ duration: 0.7 }}
+    72→      className="text-center mb-10"
+    73→    >
+    74→      {subtitle && (
+    75→        <p className="text-gold/70 text-sm tracking-[0.3em] uppercase mb-3 font-[family-name:var(--font-cormorant)]">
+    76→          {subtitle}
+    77→        </p>
+    78→      )}
+    79→      <h2
+    80→        className="text-2xl sm:text-3xl md:text-4xl font-bold gold-shimmer font-[family-name:var(--font-cinzel)]"
+    81→      >
+    82→        {children}
+    83→      </h2>
+    84→    </motion.div>
+    85→  );
+    86→}
+    87→
+    88→function AnimatedSection({
+    89→  children,
+    90→  className = "",
+    91→  delay = 0,
+    92→}: {
+    93→  children: React.ReactNode;
+    94→  className?: string;
+    95→  delay?: number;
+    96→}) {
+    97→  const ref = useRef(null);
+    98→  const isInView = useInView(ref, { once: true, margin: "-80px" });
+    99→  return (
+   100→    <motion.div
+   101→      ref={ref}
+   102→      initial={{ opacity: 0, y: 40 }}
+   103→      animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 40 }}
+   104→      transition={{ duration: 0.7, delay, ease: "easeOut" }}
+   105→      className={className}
+   106→    >
+   107→      {children}
+   108→    </motion.div>
+   109→  );
+   110→}
+   111→
+   112→/* ═══════════════════════════════════════════
+   113→   FLOATING PARTICLES
+   114→   ═══════════════════════════════════════════ */
+   115→
+   116→function FloatingParticles() {
+   117→  const particles = Array.from({ length: 15 }, (_, i) => ({
+   118→    id: i,
+   119→    left: `${Math.random() * 100}%`,
+   120→    size: 2 + Math.random() * 4,
+   121→    duration: 10 + Math.random() * 15,
+   122→    delay: Math.random() * 10,
+   123→    drift: -40 + Math.random() * 80,
+   124→    spin: 180 + Math.random() * 360,
+   125→    opacity: 0.2 + Math.random() * 0.4,
+   126→    isGold: Math.random() > 0.4,
+   127→  }));
+   128→
+   129→  return (
+   130→    <div className="fixed inset-0 pointer-events-none z-[1] overflow-hidden" aria-hidden>
+   131→      {particles.map((p) => (
+   132→        <div
+   133→          key={p.id}
+   134→          className="particle"
+   135→          style={{
+   136→            left: p.left,
+   137→            bottom: "-10px",
+   138→            width: `${p.size}px`,
+   139→            height: `${p.size}px`,
+   140→            background: p.isGold
+   141→              ? "radial-gradient(circle, #C9A96E, transparent)"
+   142→              : "radial-gradient(circle, #722F37, transparent)",
+   143→            borderRadius: "50%",
+   144→            opacity: p.opacity,
+   145→            ["--duration" as string]: `${p.duration}s`,
+   146→            ["--delay" as string]: `${p.delay}s`,
+   147→            ["--drift" as string]: `${p.drift}px`,
+   148→            ["--spin" as string]: `${p.spin}deg`,
+   149→          }}
+   150→        />
+   151→      ))}
+   152→    </div>
+   153→  );
+   154→}
+   155→
+   156→/* ═══════════════════════════════════════════
+   157→   MAGICAL TEXT COMPONENTS
+   158→   ═══════════════════════════════════════════ */
+   159→
+   160→type MagicVariant = "rise" | "dissolve" | "materialize";
+   161→
+   162→function MagicalChar({
+   163→  char,
+   164→  index,
+   165→  delay,
+   166→  variant,
+   167→  active,
+   168→}: {
+   169→  char: string;
+   170→  index: number;
+   171→  delay: number;
+   172→  variant: MagicVariant;
+   173→  active: boolean;
+   174→}) {
+   175→  const pseudoRandom = Math.sin(index * 7.3) * 10;
+   176→
+   177→  const configs: Record<
+   178→    MagicVariant,
+   179→    { initial: Record<string, unknown>; animate: Record<string, unknown> }
+   180→  > = {
+   181→    rise: {
+   182→      initial: {
+   183→        y: 50,
+   184→        opacity: 0,
+   185→        scale: 0.7,
+   186→        rotateZ: pseudoRandom,
+   187→        filter: "blur(4px)",
+   188→      },
+   189→      animate: {
+   190→        y: 0,
+   191→        opacity: 1,
+   192→        scale: 1,
+   193→        rotateZ: 0,
+   194→        filter: "blur(0px)",
+   195→      },
+   196→    },
+   197→    dissolve: {
+   198→      initial: {
+   199→        opacity: 0,
+   200→        y: 20,
+   201→        scale: 1.3,
+   202→        filter: "blur(10px)",
+   203→      },
+   204→      animate: {
+   205→        opacity: 1,
+   206→        y: 0,
+   207→        scale: 1,
+   208→        filter: "blur(0px)",
+   209→      },
+   210→    },
+   211→    materialize: {
+   212→      initial: { scale: 0, opacity: 0, rotateZ: pseudoRandom * 0.5 },
+   213→      animate: { scale: 1, opacity: 1, rotateZ: 0 },
+   214→    },
+   215→  };
+   216→
+   217→  const config = configs[variant];
+   218→  const isSpring = variant === "materialize";
+   219→
+   220→  return (
+   221→    <motion.span
+   222→      initial={config.initial}
+   223→      animate={active ? config.animate : config.initial}
+   224→      transition={{
+   225→        duration: isSpring ? 0.8 : 0.55,
+   226→        delay,
+   227→        type: isSpring ? ("spring" as const) : ("tween" as const),
+   228→        bounce: isSpring ? 0.6 : undefined,
+   229→        ease: isSpring ? undefined : [0.25, 0.46, 0.45, 0.94],
+   230→      }}
+   231→      className="inline-block"
+   232→      style={{ willChange: "transform, opacity, filter" }}
+   233→    >
+   234→      {char === " " ? "\u00A0" : char}
+   235→    </motion.span>
+   236→  );
+   237→}
+   238→
+   239→function LightSweep({
+   240→  active,
+   241→  delay,
+   242→}: {
+   243→  active: boolean;
+   244→  delay: number;
+   245→}) {
+   246→  return (
+   247→    <motion.div
+   248→      initial={{ x: "-120%", opacity: 0 }}
+   249→      animate={
+   250→        active
+   251→          ? { x: "400%", opacity: [0, 0.8, 0.8, 0] }
+   252→          : { x: "-120%", opacity: 0 }
+   253→      }
+   254→      transition={{ duration: 1.2, delay, ease: "easeInOut" }}
+   255→      className="absolute inset-y-0 w-2/5 pointer-events-none z-20"
+   256→      style={{
+   257→        background:
+   258→          "linear-gradient(90deg, transparent, rgba(201,169,110,0.2), rgba(255,255,255,0.35), rgba(201,169,110,0.2), transparent)",
+   259→        filter: "blur(12px)",
+   260→      }}
+   261→    />
+   262→  );
+   263→}
+   264→
+   265→function MagicSparkles({
+   266→  active,
+   267→  delay,
+   268→}: {
+   269→  active: boolean;
+   270→  delay: number;
+   271→}) {
+   272→  const sparkles = useMemo(
+   273→    () =>
+   274→      Array.from({ length: 16 }, (_, i) => ({
+   275→        id: i,
+   276→        angle: (i / 16) * 360 + (i % 3) * 15,
+   277→        distance: 50 + Math.sin(i * 3.7) * 50,
+   278→        size: 2 + (i % 4) * 1.5,
+   279→        sparkleDelay: delay + (i % 5) * 0.08,
+   280→        isGold: i % 3 !== 0,
+   281→      })),
+   282→    [delay]
+   283→  );
+   284→
+   285→  return (
+   286→    <div className="absolute inset-0 pointer-events-none overflow-visible">
+   287→      {sparkles.map((s) => (
+   288→        <motion.div
+   289→          key={s.id}
+   290→          initial={{ scale: 0, opacity: 0, x: 0, y: 0 }}
+   291→          animate={
+   292→            active
+   293→              ? {
+   294→                  scale: [0, 1.8, 0],
+   295→                  opacity: [0, 1, 0],
+   296→                  x: Math.cos((s.angle * Math.PI) / 180) * s.distance,
+   297→                  y: Math.sin((s.angle * Math.PI) / 180) * s.distance,
+   298→                }
+   299→              : {}
+   300→          }
+   301→          transition={{
+   302→            duration: 0.9,
+   303→            delay: s.sparkleDelay,
+   304→            ease: "easeOut",
+   305→          }}
+   306→          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+   307→          style={{
+   308→            width: s.size,
+   309→            height: s.size,
+   310→            borderRadius: "50%",
+   311→            background: s.isGold ? "#C9A96E" : "#E8D5A3",
+   312→            boxShadow: `0 0 ${s.size * 3}px ${s.isGold ? "rgba(201,169,110,0.9)" : "rgba(232,213,163,0.9)"}`,
+   313→          }}
+   314→        />
+   315→      ))}
+   316→    </div>
+   317→  );
+   318→}
+   319→
+   320→function MagicalText({
+   321→  text,
+   322→  active,
+   323→  baseDelay,
+   324→  stagger,
+   325→  variant,
+   326→  className,
+   327→}: {
+   328→  text: string;
+   329→  active: boolean;
+   330→  baseDelay: number;
+   331→  stagger: number;
+   332→  variant: MagicVariant;
+   333→  className: string;
+   334→}) {
+   335→  return (
+   336→    <span className={className} aria-label={text}>
+   337→      {text.split("").map((char, i) => (
+   338→        <MagicalChar
+   339→          key={`${variant}-${i}`}
+   340→          char={char}
+   341→          index={i}
+   342→          delay={baseDelay + i * stagger}
+   343→          variant={variant}
+   344→          active={active}
+   345→        />
+   346→      ))}
+   347→    </span>
+   348→  );
+   349→}
+   350→
+   351→/* ═══════════════════════════════════════════
+   352→   HERO SECTION
+   353→   ═══════════════════════════════════════════ */
+   354→
+   355→function HeroSection() {
+   356→  const [loaded, setLoaded] = useState(false);
+   357→  const videoRef = useRef<HTMLVideoElement>(null);
+   358→
+   359→  return (
+   360→    <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
+   361→      {/* Video Background */}
+   362→      <div className="absolute inset-0 overflow-hidden">
+   363→        <video
+   364→          ref={videoRef}
+   365→          src="/bg.mp4"
+   366→          autoPlay
+   367→          muted
+   368→          loop
+   369→          playsInline
+   370→          preload="auto"
+   371→          onCanPlay={() => setLoaded(true)}
+   372→          className="absolute inset-0 w-full h-full object-cover scale-105"
+   373→        />
+   374→      </div>
+   375→
+   376→      {/* Overlays — subtle dark edges */}
+   377→      <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black/80 pointer-events-none" />
+   378→      <div className="absolute inset-0 vignette pointer-events-none" />
+   379→
+   380→      {/* Hero Image — animated entrance, right-center */}
+   381→      <div className="relative z-10 min-h-screen flex items-center justify-end">
+   382→        <div className="pr-4 sm:pr-8 md:pr-12 lg:pr-16">
+   383→          <motion.div
+   384→            initial={{ opacity: 0, x: 80, scale: 0.85, rotateY: -15 }}
+   385→            animate={loaded ? { opacity: 1, x: 0, scale: 1, rotateY: 0 } : {}}
+   386→            transition={{ duration: 1.4, delay: 0.5, ease: [0.22, 1, 0.36, 1] }}
+   387→            className="relative"
+   388→          >
+   389→            <motion.div
+   390→              animate={loaded ? { y: [0, -8, 0] } : {}}
+   391→              transition={{ duration: 4, delay: 2.5, repeat: Infinity, ease: "easeInOut" }}
+   392→            >
+   393→              <Image
+   394→                src="/hero-image.png"
+   395→                alt="Mascarada Vampiresa - XV Años Johanny Chiquinquirá"
+   396→                width={320}
+   397→                height={480}
+   398→                className="w-56 sm:w-64 md:w-72 lg:w-80 h-auto object-contain drop-shadow-[0_0_40px_rgba(114,47,55,0.4)]"
+   399→                priority
+   400→              />
+   401→            </motion.div>
+   402→            {/* Glow behind image */}
+   403→            <motion.div
+   404→              initial={{ opacity: 0 }}
+   405→              animate={loaded ? { opacity: 1 } : {}}
+   406→              transition={{ duration: 2, delay: 1.5 }}
+   407→              className="absolute -inset-8 -z-10 rounded-full bg-wine/20 blur-3xl"
+   408→            />
+   409→          </motion.div>
+   410→        </div>
+   411→      </div>
+   412→
+   413→      {/* Scroll Indicator */}
+   414→      <motion.div
+   415→        initial={{ opacity: 0, y: 10 }}
+   416→        animate={loaded ? { opacity: 1, y: 0 } : {}}
+   417→        transition={{ delay: 4.5, duration: 0.8 }}
+   418→        className="absolute bottom-8 left-1/2 -translate-x-1/2 z-10"
+   419→      >
+   420→        <a
+   421→          href="#cuenta-regresiva"
+   422→          aria-label="Desplazar hacia abajo"
+   423→          className="flex flex-col items-center gap-2 text-gold/60 hover:text-gold transition-colors"
+   424→        >
+   425→          <span className="text-xs tracking-widest uppercase font-[family-name:var(--font-cormorant)]">
+   426→            Descubre
+   427→          </span>
+   428→          <ChevronDown className="w-5 h-5 bounce-slow" />
+   429→        </a>
+   430→      </motion.div>
+   431→    </section>
+   432→  );
+   433→}
+   434→
+   435→/* ═══════════════════════════════════════════
+   436→   COUNTDOWN SECTION
+   437→   ═══════════════════════════════════════════ */
+   438→
+   439→function CountdownSection() {
+   440→  const calculateTime = useCallback(() => {
+   441→    const now = new Date().getTime();
+   442→    const distance = EVENT_DATE.getTime() - now;
+   443→    if (distance < 0) return { days: 0, hours: 0, minutes: 0, seconds: 0 };
+   444→    return {
+   445→      days: Math.floor(distance / (1000 * 60 * 60 * 24)),
+   446→      hours: Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
+   447→      minutes: Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60)),
+   448→      seconds: Math.floor((distance % (1000 * 60)) / 1000),
+   449→    };
+   450→  }, []);
+   451→
+   452→  const [timeLeft, setTimeLeft] = useState(() => calculateTime());
+   453→
+   454→  useEffect(() => {
+   455→    const interval = setInterval(() => {
+   456→      setTimeLeft(calculateTime());
+   457→    }, 1000);
+   458→    return () => clearInterval(interval);
+   459→  }, [calculateTime]);
+   460→
+   461→  const units = [
+   462→    { label: "Días", value: timeLeft.days },
+   463→    { label: "Horas", value: timeLeft.hours },
+   464→    { label: "Minutos", value: timeLeft.minutes },
+   465→    { label: "Segundos", value: timeLeft.seconds },
+   466→  ];
+   467→
+   468→  return (
+   469→    <section
+   470→      id="cuenta-regresiva"
+   471→      className="relative py-20 sm:py-28 noise-overlay overflow-hidden section-bg"
+   472→    >
+   473→      <div className="relative z-10 max-w-2xl mx-auto px-6 text-center">
+   474→        <SectionTitle subtitle="La espera casi termina">Faltan</SectionTitle>
+   475→
+   476→        <div className="grid grid-cols-4 gap-3 sm:gap-6 mt-8">
+   477→          {units.map((unit, i) => (
+   478→            <motion.div
+   479→              key={unit.label}
+   480→              initial={{ opacity: 0, y: 30 }}
+   481→              whileInView={{ opacity: 1, y: 0 }}
+   482→              viewport={{ once: true }}
+   483→              transition={{ duration: 0.6, delay: 0.2 + i * 0.15 }}
+   484→              className="relative"
+   485→            >
+   486→              <div className="relative bg-vampire-card border border-vampire-border rounded-lg p-3 sm:p-5 pulse-gold">
+   487→                <span
+   488→                  className="text-3xl sm:text-5xl md:text-6xl font-bold text-wine-light font-[family-name:var(--font-cinzel)] tabular-nums"
+   489→                  suppressHydrationWarning
+   490→                >
+   491→                  {String(unit.value).padStart(2, "0")}
+   492→                </span>
+   493→              </div>
+   494→              <p className="text-gold/70 text-[10px] sm:text-xs tracking-[0.2em] uppercase mt-2 font-[family-name:var(--font-cormorant)]">
+   495→                {unit.label}
+   496→              </p>
+   497→            </motion.div>
+   498→          ))}
+   499→        </div>
+   500→
+   501→        <AnimatedSection delay={0.8} className="mt-8">
+   502→          <p className="text-cream/60 text-sm font-[family-name:var(--font-cormorant)]">
+   503→            19 de Septiembre de 2026 &middot; 9:00 PM
+   504→          </p>
+   505→        </AnimatedSection>
+   506→      </div>
+   507→    </section>
+   508→  );
+   509→}
+   510→
+   511→/* ═══════════════════════════════════════════
+   512→   EVENT DETAILS SECTION
+   513→   ═══════════════════════════════════════════ */
+   514→
+   515→function EventDetailsSection() {
+   516→  return (
+   517→    <section id="evento" className="relative py-20 sm:py-28 px-6">
+   518→      <div className="max-w-2xl mx-auto text-center">
+   519→        <SectionTitle subtitle="Los esperamos">La Fiesta</SectionTitle>
+   520→
+   521→        <div className="space-y-6 mt-8">
+   522→          <AnimatedSection>
+   523→            <div className="bg-vampire-card/80 backdrop-blur-sm border border-vampire-border rounded-xl p-6 sm:p-8 space-y-6">
+   524→              {/* Date */}
+   525→              <div className="flex items-center justify-center gap-3">
+   526→                <Calendar className="w-5 h-5 text-gold flex-shrink-0" />
+   527→                <div>
+   528→                  <p className="text-cream/60 text-xs tracking-widest uppercase font-[family-name:var(--font-cormorant)]">
+   529→                    Fecha
+   530→                  </p>
+   531→                  <p className="text-cream text-lg sm:text-xl font-[family-name:var(--font-cormorant)] font-semibold">
+   532→                    19 de Septiembre de 2026
+   533→                  </p>
+   534→                </div>
+   535→              </div>
+   536→
+   537→              <div className="h-px bg-gradient-to-r from-transparent via-vampire-border to-transparent" />
+   538→
+   539→              {/* Time */}
+   540→              <div className="flex items-center justify-center gap-3">
+   541→                <Clock className="w-5 h-5 text-gold flex-shrink-0" />
+   542→                <div>
+   543→                  <p className="text-cream/60 text-xs tracking-widest uppercase font-[family-name:var(--font-cormorant)]">
+   544→                    Hora
+   545→                  </p>
+   546→                  <p className="text-cream text-lg sm:text-xl font-[family-name:var(--font-cormorant)] font-semibold">
+   547→                    9:00 PM
+   548→                  </p>
+   549→                </div>
+   550→              </div>
+   551→
+   552→              <div className="h-px bg-gradient-to-r from-transparent via-vampire-border to-transparent" />
+   553→
+   554→              {/* Venue */}
+   555→              <div className="flex items-start justify-center gap-3">
+   556→                <MapPin className="w-5 h-5 text-gold flex-shrink-0 mt-1" />
+   557→                <div className="text-left">
+   558→                  <p className="text-cream/60 text-xs tracking-widest uppercase font-[family-name:var(--font-cormorant)]">
+   559→                    Lugar
+   560→                  </p>
+   561→                  <p className="text-cream text-lg sm:text-xl font-[family-name:var(--font-cormorant)] font-semibold">
+   562→                    {VENUE}
+   563→                  </p>
+   564→                  <p className="text-cream/50 text-sm font-[family-name:var(--font-cormorant)] mt-1">
+   565→                    {ADDRESS}
+   566→                  </p>
+   567→                </div>
+   568→              </div>
+   569→            </div>
+   570→          </AnimatedSection>
+   571→
+   572→          {/* Action Buttons */}
+   573→          <AnimatedSection delay={0.3}>
+   574→            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+   575→              <a href={MAP_URL} target="_blank" rel="noopener noreferrer">
+   576→                <Button
+   577→                  className="w-full sm:w-auto bg-wine hover:bg-wine-light text-cream border border-wine-light/30 font-[family-name:var(--font-cormorant)] text-base px-8 py-5 rounded-lg transition-all duration-300 hover:shadow-[0_0_20px_rgba(114,47,55,0.4)]"
+   578→                >
+   579→                  <MapPin className="w-4 h-4 mr-2" />
+   580→                  Ver Ubicación
+   581→                </Button>
+   582→              </a>
+   583→              <a href={CALENDAR_URL} target="_blank" rel="noopener noreferrer">
+   584→                <Button
+   585→                  variant="outline"
+   586→                  className="w-full sm:w-auto border-gold/40 text-gold hover:bg-gold/10 hover:text-gold-light font-[family-name:var(--font-cormorant)] text-base px-8 py-5 rounded-lg transition-all duration-300"
+   587→                >
+   588→                  <Calendar className="w-4 h-4 mr-2" />
+   589→                  Agregar al Calendario
+   590→                </Button>
+   591→              </a>
+   592→            </div>
+   593→          </AnimatedSection>
+   594→        </div>
+   595→      </div>
+   596→    </section>
+   597→  );
+   598→}
+   599→
+   600→/* ═══════════════════════════════════════════
+   601→   DRESS CODE SECTION
+   602→   ═══════════════════════════════════════════ */
+   603→
+   604→function DressCodeSection() {
+   605→  return (
+   606→    <section
+   607→      id="vestimenta"
+   608→      className="relative py-20 sm:py-28 noise-overlay overflow-hidden section-bg"
+   609→    >
+   610→      <div className="relative z-10 max-w-2xl mx-auto px-6 text-center">
+   611→        <SectionTitle subtitle="Tu presencia es importante">
+   612→          Código de Vestimenta
+   613→        </SectionTitle>
+   614→
+   615→        <AnimatedSection>
+   616→          <p className="text-gold text-2xl sm:text-3xl font-[family-name:var(--font-cinzel)] mb-10 tracking-wider">
+   617→            FORMAL
+   618→          </p>
+   619→        </AnimatedSection>
+   620→
+   621→        {/* Dress Colors */}
+   622→        <AnimatedSection delay={0.2}>
+   623→          <div className="mb-10">
+   624→            <p className="text-cream/50 text-xs tracking-[0.2em] uppercase mb-5 font-[family-name:var(--font-cormorant)]">
+   625→              Colores Permitidos
+   626→            </p>
+   627→            <div className="flex flex-wrap justify-center gap-4 sm:gap-6">
+   628→              {DRESS_COLORS.map((color, i) => (
+   629→                <motion.div
+   630→                  key={color.name}
+   631→                  initial={{ opacity: 0, scale: 0.8 }}
+   632→                  whileInView={{ opacity: 1, scale: 1 }}
+   633→                  viewport={{ once: true }}
+   634→                  transition={{ duration: 0.4, delay: 0.3 + i * 0.1 }}
+   635→                  whileHover={{ scale: 1.1, y: -4 }}
+   636→                  className="flex flex-col items-center gap-2 cursor-default"
+   637→                >
+   638→                  <div
+   639→                    className="w-14 h-14 sm:w-16 sm:h-16 rounded-full border-2 border-cream/20 shadow-lg transition-shadow duration-300 hover:shadow-[0_0_15px_rgba(201,169,110,0.3)]"
+   640→                    style={{ backgroundColor: color.hex }}
+   641→                  />
+   642→                  <span className="text-cream/70 text-[11px] sm:text-xs font-[family-name:var(--font-cormorant)]">
+   643→                    {color.name}
+   644→                  </span>
+   645→                </motion.div>
+   646→              ))}
+   647→            </div>
+   648→          </div>
+   649→        </AnimatedSection>
+   650→
+   651→        <OrnamentalDivider />
+   652→
+   653→        {/* Party Colors */}
+   654→        <AnimatedSection delay={0.4}>
+   655→          <div className="mt-6">
+   656→            <p className="text-cream/50 text-xs tracking-[0.2em] uppercase mb-5 font-[family-name:var(--font-cormorant)]">
+   657→              Colores de la Fiesta
+   658→            </p>
+   659→            <div className="flex justify-center gap-6">
+   660→              {PARTY_COLORS.map((color, i) => (
+   661→                <motion.div
+   662→                  key={color.name}
+   663→                  initial={{ opacity: 0, scale: 0.8 }}
+   664→                  whileInView={{ opacity: 1, scale: 1 }}
+   665→                  viewport={{ once: true }}
+   666→                  transition={{ duration: 0.4, delay: 0.5 + i * 0.1 }}
+   667→                  className="flex flex-col items-center gap-2"
+   668→                >
+   669→                  <div
+   670→                    className="w-14 h-14 sm:w-16 sm:h-16 rounded-full shadow-lg transition-shadow duration-300 hover:shadow-[0_0_20px_rgba(114,47,55,0.5)]"
+   671→                    style={{
+   672→                      backgroundColor: color.hex,
+   673→                      border: `2px solid ${color.border || color.hex}`,
+   674→                    }}
+   675→                  />
+   676→                  <span className="text-cream/70 text-[11px] sm:text-xs font-[family-name:var(--font-cormorant)]">
+   677→                    {color.name}
+   678→                  </span>
+   679→                </motion.div>
+   680→              ))}
+   681→            </div>
+   682→          </div>
+   683→        </AnimatedSection>
+   684→      </div>
+   685→    </section>
+   686→  );
+   687→}
+   688→
+   689→/* ═══════════════════════════════════════════
+   690→   PARENTS SECTION
+   691→   ═══════════════════════════════════════════ */
+   692→
+   693→function ParentsSection() {
+   694→  return (
+   695→    <section className="relative py-20 sm:py-28 px-6">
+   696→      <div className="max-w-2xl mx-auto text-center">
+   697→        <SectionTitle subtitle="Con todo su amor">Sus Padres</SectionTitle>
+   698→
+   699→        <AnimatedSection className="mt-8">
+   700→          <div className="space-y-2">
+   701→            <motion.p
+   702→              initial={{ opacity: 0, x: -20 }}
+   703→              whileInView={{ opacity: 1, x: 0 }}
+   704→              viewport={{ once: true }}
+   705→              transition={{ duration: 0.7 }}
+   706→              className="text-cream text-2xl sm:text-3xl font-[family-name:var(--font-cormorant)] font-light"
+   707→            >
+   708→              {PARENTS[0]}
+   709→            </motion.p>
+   710→
+   711→            <motion.div
+   712→              initial={{ opacity: 0, scale: 0.5 }}
+   713→              whileInView={{ opacity: 1, scale: 1 }}
+   714→              viewport={{ once: true }}
+   715→              transition={{ duration: 0.5, delay: 0.3 }}
+   716→            >
+   717→              <span className="text-gold text-xl">&</span>
+   718→            </motion.div>
+   719→
+   720→            <motion.p
+   721→              initial={{ opacity: 0, x: 20 }}
+   722→              whileInView={{ opacity: 1, x: 0 }}
+   723→              viewport={{ once: true }}
+   724→              transition={{ duration: 0.7, delay: 0.4 }}
+   725→              className="text-cream text-2xl sm:text-3xl font-[family-name:var(--font-cormorant)] font-light"
+   726→            >
+   727→              {PARENTS[1]}
+   728→            </motion.p>
+   729→          </div>
+   730→        </AnimatedSection>
+   731→      </div>
+   732→    </section>
+   733→  );
+   734→}
+   735→
+   736→/* ═══════════════════════════════════════════
+   737→   RSVP SECTION
+   738→   ═══════════════════════════════════════════ */
+   739→
+   740→function RSVPSection() {
+   741→  const { toast } = useToast();
+   742→  const [formData, setFormData] = useState({
+   743→    name: "",
+   744→    companions: "0",
+   745→    attending: true,
+   746→    message: "",
+   747→  });
+   748→  const [isSubmitting, setIsSubmitting] = useState(false);
+   749→  const [confirmedCount, setConfirmedCount] = useState<number | null>(null);
+   750→
+   751→  useEffect(() => {
+   752→    fetch("/api/rsvp")
+   753→      .then((res) => res.json())
+   754→      .then((data) => setConfirmedCount(data.confirmed))
+   755→      .catch(() => {});
+   756→  }, []);
+   757→
+   758→  const handleSubmit = async (e: React.FormEvent) => {
+   759→    e.preventDefault();
+   760→    if (!formData.name.trim()) {
+   761→      toast({
+   762→        title: "Nombre requerido",
+   763→        description: "Por favor ingresa tu nombre",
+   764→        variant: "destructive",
+   765→      });
+   766→      return;
+   767→    }
+   768→    setIsSubmitting(true);
+   769→    try {
+   770→      const res = await fetch("/api/rsvp", {
+   771→        method: "POST",
+   772→        headers: { "Content-Type": "application/json" },
+   773→        body: JSON.stringify(formData),
+   774→      });
+   775→      if (res.ok) {
+   776→        toast({
+   777→          title: formData.attending
+   778→            ? "¡Confirmación recibida!"
+   779→            : "Lamentamos que no puedas asistir",
+   780→          description: formData.attending
+   781→            ? `Gracias ${formData.name}, te esperamos en la Mascarada Vampiresa`
+   782→            : `Gracias por avisarnos, ${formData.name}`,
+   783→        });
+   784→        setFormData({ name: "", companions: "0", attending: true, message: "" });
+   785→        const countRes = await fetch("/api/rsvp");
+   786→        const countData = await countRes.json();
+   787→        setConfirmedCount(countData.confirmed);
+   788→      }
+   789→    } catch {
+   790→      toast({
+   791→        title: "Error",
+   792→        description: "No se pudo enviar la confirmación. Intenta de nuevo.",
+   793→        variant: "destructive",
+   794→      });
+   795→    } finally {
+   796→      setIsSubmitting(false);
+   797→    }
+   798→  };
+   799→
+   800→  return (
+   801→    <section
+   802→      id="rsvp"
+   803→      className="relative py-20 sm:py-28 noise-overlay overflow-hidden section-bg"
+   804→    >
+   805→      <div className="relative z-10 max-w-lg mx-auto px-6 text-center">
+   806→        <SectionTitle subtitle="Haz tu presencia cuenta">Confirma tu Asistencia</SectionTitle>
+   807→
+   808→        {/* Confirmed counter */}
+   809→        {confirmedCount !== null && (
+   810→          <AnimatedSection className="mb-8">
+   811→            <div className="inline-flex items-center gap-2 bg-wine-dark/60 border border-wine/30 rounded-full px-5 py-2">
+   812→              <Users className="w-4 h-4 text-gold" />
+   813→              <span className="text-cream/80 text-sm font-[family-name:var(--font-cormorant)]">
+   814→                <span className="text-gold font-bold">{confirmedCount}</span> invitados confirmados
+   815→              </span>
+   816→            </div>
+   817→          </AnimatedSection>
+   818→        )}
+   819→
+   820→        <AnimatedSection delay={0.2}>
+   821→          <form onSubmit={handleSubmit} className="space-y-5">
+   822→            {/* Name */}
+   823→            <div className="text-left">
+   824→              <label className="text-cream/60 text-xs tracking-widest uppercase mb-2 block font-[family-name:var(--font-cormorant)]">
+   825→                Tu Nombre *
+   826→              </label>
+   827→              <Input
+   828→                value={formData.name}
+   829→                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+   830→                placeholder="Ej: María García"
+   831→                className="bg-vampire-card border-vampire-border text-cream placeholder:text-cream/30 focus:border-wine focus:ring-wine/30 font-[family-name:var(--font-cormorant)] text-base h-12 rounded-lg"
+   832→                required
+   833→              />
+   834→            </div>
+   835→
+   836→            {/* Attending toggle */}
+   837→            <div className="text-left">
+   838→              <label className="text-cream/60 text-xs tracking-widest uppercase mb-3 block font-[family-name:var(--font-cormorant)]">
+   839→                ¿Asistirás?
+   840→              </label>
+   841→              <div className="flex gap-3">
+   842→                <button
+   843→                  type="button"
+   844→                  onClick={() => setFormData({ ...formData, attending: true })}
+   845→                  className={`flex-1 py-3 px-4 rounded-lg border text-sm font-medium transition-all duration-300 font-[family-name:var(--font-cormorant)] ${
+   846→                    formData.attending
+   847→                      ? "bg-wine border-wine text-cream shadow-[0_0_15px_rgba(114,47,55,0.3)]"
+   848→                      : "bg-vampire-card border-vampire-border text-cream/50 hover:border-cream/20"
+   849→                  }`}
+   850→                >
+   851→                  Sí, asistiré
+   852→                </button>
+   853→                <button
+   854→                  type="button"
+   855→                  onClick={() => setFormData({ ...formData, attending: false })}
+   856→                  className={`flex-1 py-3 px-4 rounded-lg border text-sm font-medium transition-all duration-300 font-[family-name:var(--font-cormorant)] ${
+   857→                    !formData.attending
+   858→                      ? "bg-wine border-wine text-cream shadow-[0_0_15px_rgba(114,47,55,0.3)]"
+   859→                      : "bg-vampire-card border-vampire-border text-cream/50 hover:border-cream/20"
+   860→                  }`}
+   861→                >
+   862→                  No podré
+   863→                </button>
+   864→              </div>
+   865→            </div>
+   866→
+   867→            {/* Companions */}
+   868→            {formData.attending && (
+   869→              <motion.div
+   870→                initial={{ opacity: 0, height: 0 }}
+   871→                animate={{ opacity: 1, height: "auto" }}
+   872→                exit={{ opacity: 0, height: 0 }}
+   873→                className="text-left"
+   874→              >
+   875→                <label className="text-cream/60 text-xs tracking-widest uppercase mb-2 block font-[family-name:var(--font-cormorant)]">
+   876→                  Número de Acompañantes
+   877→                </label>
+   878→                <Input
+   879→                  type="number"
+   880→                  min="0"
+   881→                  max="5"
+   882→                  value={formData.companions}
+   883→                  onChange={(e) =>
+   884→                    setFormData({
+   885→                      ...formData,
+   886→                      companions: Math.max(0, Math.min(5, parseInt(e.target.value) || 0)).toString(),
+   887→                    })
+   888→                  }
+   889→                  className="bg-vampire-card border-vampire-border text-cream placeholder:text-cream/30 focus:border-wine focus:ring-wine/30 font-[family-name:var(--font-cormorant)] text-base h-12 rounded-lg"
+   890→                />
+   891→              </motion.div>
+   892→            )}
+   893→
+   894→            {/* Message */}
+   895→            <div className="text-left">
+   896→              <label className="text-cream/60 text-xs tracking-widest uppercase mb-2 block font-[family-name:var(--font-cormorant)]">
+   897→                Mensaje (opcional)
+   898→              </label>
+   899→              <Textarea
+   900→                value={formData.message}
+   901→                onChange={(e) => setFormData({ ...formData, message: e.target.value })}
+   902→                placeholder="Déjale un mensaje especial a Johanny..."
+   903→                rows={3}
+   904→                className="bg-vampire-card border-vampire-border text-cream placeholder:text-cream/30 focus:border-wine focus:ring-wine/30 font-[family-name:var(--font-cormorant)] text-base rounded-lg resize-none"
+   905→              />
+   906→            </div>
+   907→
+   908→            {/* Submit */}
+   909→            <Button
+   910→              type="submit"
+   911→              disabled={isSubmitting}
+   912→              className="w-full bg-gold hover:bg-gold-light text-vampire-dark font-bold text-base h-12 rounded-lg transition-all duration-300 font-[family-name:var(--font-cinzel)] tracking-wider hover:shadow-[0_0_25px_rgba(201,169,110,0.4)] disabled:opacity-50"
+   913→            >
+   914→              {isSubmitting ? (
+   915→                <motion.div
+   916→                  animate={{ rotate: 360 }}
+   917→                  transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+   918→                  className="w-5 h-5 border-2 border-vampire-dark/30 border-t-vampire-dark rounded-full"
+   919→                />
+   920→              ) : (
+   921→                <>
+   922→                  <Send className="w-4 h-4 mr-2" />
+   923→                  CONFIRMAR
+   924→                </>
+   925→              )}
+   926→            </Button>
+   927→          </form>
+   928→        </AnimatedSection>
+   929→      </div>
+   930→    </section>
+   931→  );
+   932→}
+   933→
+   934→/* ═══════════════════════════════════════════
+   935→   FOOTER
+   936→   ═══════════════════════════════════════════ */
+   937→
+   938→function FooterSection() {
+   939→  return (
+   940→    <footer className="relative py-16 sm:py-20 px-6 text-center border-t border-vampire-border/50">
+   941→      <div className="max-w-lg mx-auto">
+   942→        <OrnamentalDivider className="mb-8" />
+   943→        <motion.div
+   944→          initial={{ opacity: 0, y: 20 }}
+   945→          whileInView={{ opacity: 1, y: 0 }}
+   946→          viewport={{ once: true }}
+   947→          transition={{ duration: 0.8 }}
+   948→        >
+   949→          <p className="text-gold text-xl sm:text-2xl font-[family-name:var(--font-cormorant)] font-light mb-2">
+   950→            ¡Te esperamos!
+   951→          </p>
+   952→          <p className="text-cream/40 text-sm font-[family-name:var(--font-cormorant)] mb-6">
+   953→            Será una noche inolvidable
+   954→          </p>
+   955→          <p className="gold-shimmer text-lg font-[family-name:var(--font-cinzel)] font-bold">
+   956→            Mascarada Vampiresa
+   957→          </p>
+   958→          <p className="text-cream/60 text-base font-[family-name:var(--font-cormorant)] mt-1">
+   959→            {QUINCEANERA}
+   960→          </p>
+   961→          <p className="text-gold/50 text-sm font-[family-name:var(--font-cormorant)] tracking-wider mt-1">
+   962→            XV Años
+   963→          </p>
+   964→        </motion.div>
+   965→        <OrnamentalDivider className="mt-8" />
+   966→      </div>
+   967→    </footer>
+   968→  );
+   969→}
+   970→
+   971→/* ═══════════════════════════════════════════
+   972→   MAIN PAGE
+   973→   ═══════════════════════════════════════════ */
+   974→
+   975→export default function QuinceaneraInvitation() {
+   976→  return (
+   977→    <main className="min-h-screen bg-vampire-dark relative">
+   978→      <FloatingParticles />
+   979→      <HeroSection />
+   980→      <CountdownSection />
+   981→      <OrnamentalDivider />
+   982→      <EventDetailsSection />
+   983→      <OrnamentalDivider />
+   984→      <DressCodeSection />
+   985→      <OrnamentalDivider />
+   986→      <ParentsSection />
+   987→      <OrnamentalDivider />
+   988→      <RSVPSection />
+   989→      <FooterSection />
+   990→    </main>
+   991→  );
+   992→}
